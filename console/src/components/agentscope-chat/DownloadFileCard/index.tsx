@@ -1,7 +1,14 @@
 import React, { useMemo, useState } from "react";
-import { SparkDownloadLine } from "@agentscope-ai/icons";
+import { SparkCopyLine, SparkDownloadLine, SparkLinkLine } from "@agentscope-ai/icons";
+import { message, Tooltip, Tag } from "antd";
 import FilePreviewModal from "../FilePreviewModal";
-import { getFileIcon, getFileType } from "../FilePreviewModal/fileUtils";
+import {
+  getCapabilityColor,
+  getCapabilityLabel,
+  getFileIcon,
+  getFileType,
+  getFileTypeLabel,
+} from "../FilePreviewModal/fileUtils";
 
 export interface DownloadFileCardProps {
   url: string;
@@ -12,28 +19,28 @@ export interface DownloadFileCardProps {
 
 const EMPTY = "\u00A0";
 
-// 内联样式定义
 const cardStyle: React.CSSProperties = {
   position: "relative",
   display: "flex",
   alignItems: "center",
+  gap: 12,
   padding: "12px 16px",
   background: "#fff",
   border: "1px solid #d9d9d9",
-  borderRadius: "8px",
+  borderRadius: 12,
   cursor: "pointer",
-  transition: "all 0.3s",
-  maxWidth: "280px",
+  transition: "all 0.2s ease",
+  maxWidth: 360,
   overflow: "hidden",
+  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
 };
 
 const iconStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  width: "24px",
-  height: "24px",
-  marginRight: "8px",
+  width: 32,
+  height: 32,
   flexShrink: 0,
 };
 
@@ -42,11 +49,11 @@ const contentStyle: React.CSSProperties = {
   minWidth: 0,
   display: "flex",
   flexDirection: "column",
-  gap: "4px",
+  gap: 6,
 };
 
 const nameStyle: React.CSSProperties = {
-  fontSize: "14px",
+  fontSize: 14,
   fontWeight: 500,
   color: "#262626",
   overflow: "hidden",
@@ -54,58 +61,72 @@ const nameStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const hintStyle: React.CSSProperties = {
-  fontSize: "12px",
-  color: "#8c8c8c",
+const metaRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  minWidth: 0,
+  flexWrap: "wrap",
 };
 
-const downloadBtnStyle: React.CSSProperties = {
+const actionBarStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  flexShrink: 0,
+};
+
+const actionButtonStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  width: "24px",
-  height: "24px",
-  background: "#1677ff",
-  borderRadius: "4px",
-  color: "#fff",
+  width: 28,
+  height: 28,
+  background: "#f5f5f5",
+  borderRadius: 6,
+  color: "#595959",
   cursor: "pointer",
-  flexShrink: 0,
-  marginLeft: "8px",
+  border: "1px solid #f0f0f0",
 };
+
+function extractFileName(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    const pathname = urlObj.pathname;
+    const parts = pathname.split("/");
+    return parts[parts.length - 1] || "未知文件";
+  } catch {
+    return "未知文件";
+  }
+}
 
 function DownloadFileCard(props: DownloadFileCardProps) {
   const { url, fileName: propFileName, className, style } = props;
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
-  // Extract filename from URL if not provided
-  const fileName = useMemo(() => {
-    if (propFileName) return propFileName;
-    try {
-      const urlObj = new URL(url);
-      const pathname = urlObj.pathname;
-      const parts = pathname.split("/");
-      return parts[parts.length - 1] || "未知文件";
-    } catch {
-      return "未知文件";
-    }
-  }, [url, propFileName]);
+  const fileName = useMemo(
+    () => propFileName || extractFileName(url),
+    [url, propFileName],
+  );
 
-  const { icon } = useMemo(() => getFileIcon(fileName), [fileName]);
+  const { icon } = useMemo(() => getFileIcon(fileName, 28), [fileName]);
+  const fileType = useMemo(() => getFileType(fileName), [fileName]);
+  const fileTypeLabel = useMemo(() => getFileTypeLabel(fileType), [fileType]);
+  const capabilityLabel = useMemo(() => getCapabilityLabel(fileType), [fileType]);
+  const capabilityColor = useMemo(() => getCapabilityColor(fileType), [fileType]);
 
-  // Split filename for display
   const [namePrefix, nameSuffix] = useMemo(() => {
     const match = fileName.match(/^(.*)\.[^.]+$/);
     return match ? [match[1], fileName.slice(match[1].length)] : [fileName, ""];
   }, [fileName]);
-
-  const fileType = useMemo(() => getFileType(fileName), [fileName]);
 
   const handlePreview = () => {
     setPreviewOpen(true);
   };
 
   const handleDownload = (e: React.MouseEvent) => {
-    e.stopPropagation(); // 阻止事件冒泡，避免打开弹窗
+    e.stopPropagation();
     const link = document.createElement("a");
     link.href = url;
     link.download = fileName;
@@ -115,41 +136,27 @@ function DownloadFileCard(props: DownloadFileCardProps) {
     document.body.removeChild(link);
   };
 
-  // 合并样式
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(url);
+      message.success("链接已复制");
+    } catch {
+      message.error("复制失败");
+    }
+  };
+
+  const handleOpenNewTab = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   const mergedCardStyle = {
     ...cardStyle,
-    borderColor: "#d9d9d9",
+    borderColor: hovered ? "#91caff" : "#d9d9d9",
+    boxShadow: hovered ? "0 4px 12px rgba(22,119,255,0.12)" : cardStyle.boxShadow,
     ...style,
   };
-
-  const mergedHintStyle = {
-    ...hintStyle,
-    color: fileType === "image" ? "#1677ff" : fileType === "video" ? "#faad14" : fileType === "office" ? "#1677ff" : fileType === "pdf" ? "#ff4d4f" : fileType === "markdown" ? "#52c41a" : fileType === "text" ? "#52c41a" : fileType === "html" ? "#722ed1" : "#8c8c8c",
-  };
-
-  // 根据文件类型显示不同的提示
-  const hintText = useMemo(() => {
-    switch (fileType) {
-      case "image":
-        return "图片";
-      case "video":
-        return "视频";
-      case "audio":
-        return "音频";
-      case "office":
-        return "Office";
-      case "pdf":
-        return "PDF";
-      case "markdown":
-        return "Markdown";
-      case "text":
-        return "文本";
-      case "html":
-        return "HTML";
-      default:
-        return "文件";
-    }
-  }, [fileType]);
 
   return (
     <>
@@ -159,31 +166,51 @@ function DownloadFileCard(props: DownloadFileCardProps) {
         onClick={handlePreview}
         role="button"
         tabIndex={0}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             handlePreview();
           }
         }}
       >
-        <div style={iconStyle}>
-          {icon}
-        </div>
+        <div style={iconStyle}>{icon}</div>
         <div style={contentStyle}>
-          <div style={nameStyle}>
-            {namePrefix || EMPTY}
-            {nameSuffix}
-          </div>
-          <div style={mergedHintStyle}>
-            {hintText}
+          <Tooltip title={fileName}>
+            <div style={nameStyle}>
+              {namePrefix || EMPTY}
+              {nameSuffix}
+            </div>
+          </Tooltip>
+          <div style={metaRowStyle}>
+            <Tag bordered={false} color="default" style={{ marginInlineEnd: 0 }}>
+              {fileTypeLabel}
+            </Tag>
+            <Tag
+              bordered={false}
+              color={capabilityColor === "#52c41a" ? "success" : capabilityColor === "#faad14" ? "warning" : "default"}
+              style={{ marginInlineEnd: 0 }}
+            >
+              {capabilityLabel}
+            </Tag>
           </div>
         </div>
-        {/* 直接下载按钮 */}
-        <div
-          style={downloadBtnStyle}
-          onClick={handleDownload}
-          title="下载"
-        >
-          <SparkDownloadLine style={{ fontSize: "14px" }} />
+        <div style={actionBarStyle} onClick={(e) => e.stopPropagation()}>
+          <Tooltip title="复制链接">
+            <div style={actionButtonStyle} onClick={handleCopy}>
+              <SparkCopyLine style={{ fontSize: 14 }} />
+            </div>
+          </Tooltip>
+          <Tooltip title="新窗口打开">
+            <div style={actionButtonStyle} onClick={handleOpenNewTab}>
+              <SparkLinkLine style={{ fontSize: 14 }} />
+            </div>
+          </Tooltip>
+          <Tooltip title="下载文件">
+            <div style={actionButtonStyle} onClick={handleDownload}>
+              <SparkDownloadLine style={{ fontSize: 14, color: "#1677ff" }} />
+            </div>
+          </Tooltip>
         </div>
       </div>
       <FilePreviewModal
