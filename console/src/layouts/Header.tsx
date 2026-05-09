@@ -1,4 +1,4 @@
-import { Layout, Space, Select } from "antd";
+import { Layout, Space, Select, Switch } from "antd";
 // ==================== 语言/主题切换暂时隐藏 (Kun He) ====================
 // import LanguageSwitcher from "../components/LanguageSwitcher/index";
 // import ThemeToggleButton from "../components/ThemeToggleButton";
@@ -8,13 +8,15 @@ import { useTheme } from "../contexts/ThemeContext";
 // ==================== 品牌主题 (Kun He) ====================
 import { useBrandTheme } from "../contexts/BrandThemeContext";
 // ==================== 品牌主题结束 ====================
-// ==================== 超管用户切换 (Kun He) ====================
 import { useState, useEffect } from "react";
 import { useIframeStore } from "../stores/iframeStore";
-import { mockFetchUserList, type UserInfo } from "../api/modules/customerInfo";
-// ==================== 超管用户切换结束 ====================
+import { instanceApi } from "../api/modules/instance";
+import { DEFAULT_USER_ID } from "../constants/identity";
 
 const { Header: AntHeader } = Layout;
+
+const OPS_MODE_KEY = "swe-ops-mode";
+const REAL_USER_ID_KEY = "swe-real-user-id";
 
 export default function Header() {
   const { isDark } = useTheme();
@@ -23,53 +25,81 @@ export default function Header() {
   const { theme: brandTheme } = useBrandTheme();
   // ==================== 品牌主题结束 ====================
 
-  // ==================== 超管用户切换 (Kun He) ====================
-  // 获取 isSuperManager 和 userId
   const isSuperManager = useIframeStore((state) => state.isSuperManager);
+  const manager = useIframeStore((state) => state.manager);
   const userId = useIframeStore((state) => state.userId);
+  const source = useIframeStore((state) => state.source);
   const setContext = useIframeStore((state) => state.setContext);
+  const sourceForSwitch = source;
+  const canUseOpsMode = manager || isSuperManager;
 
-  // 用户列表状态
-  const [userList, setUserList] = useState<UserInfo[]>([]);
+  const [opsMode, setOpsMode] = useState(
+    () => sessionStorage.getItem(OPS_MODE_KEY) === "true",
+  );
+  const [realUserId, setRealUserId] = useState<string | null>(
+    () => sessionStorage.getItem(REAL_USER_ID_KEY),
+  );
+  const [userList, setUserList] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // 加载用户列表
   useEffect(() => {
-    if (isSuperManager) {
-      setLoading(true);
-      mockFetchUserList()
-        .then((res) => {
-          if (res?.success && res.data) {
-            setUserList(res.data);
-          }
-        })
-        .catch((err) => {
-          console.error("[Header] Failed to fetch user list:", err);
-        })
-        .finally(() => {
-          setLoading(false);
-        });
+    if (!canUseOpsMode || !opsMode) {
+      setUserList([]);
+      return;
     }
-  }, [isSuperManager]);
 
-  // 处理用户切换
-  const handleUserChange = (newUserId: string) => {
-    const selectedUser = userList.find((u) => u.userId === newUserId);
-    if (selectedUser) {
-      console.info("[Header] Switching to user:", selectedUser);
-
-      // 更新 store 中的用户信息
-      setContext({
-        userId: selectedUser.userId,
-        clawName: selectedUser.clawName ?? null,
-        space: selectedUser.space ?? null,
+    setLoading(true);
+    instanceApi
+      .getUsersBySource()
+      .then((users) => {
+        const userIds = users.map((user) => user.userId);
+        if (userId && !userIds.includes(userId)) {
+          setUserList([userId, ...userIds]);
+          return;
+        }
+        setUserList(userIds);
+      })
+      .catch((err) => {
+        console.error("[Header] Failed to fetch source users:", err);
+      })
+      .finally(() => {
+        setLoading(false);
       });
+  }, [canUseOpsMode, opsMode, sourceForSwitch, userId]);
 
-      // 刷新页面以重新加载对话信息
+  const handleOpsModeChange = (checked: boolean) => {
+    if (checked) {
+      const currentRealUserId = userId || DEFAULT_USER_ID;
+      sessionStorage.setItem(REAL_USER_ID_KEY, currentRealUserId);
+      sessionStorage.setItem(OPS_MODE_KEY, "true");
+      setRealUserId(currentRealUserId);
+      setOpsMode(true);
+      return;
+    }
+
+    const nextUserId = realUserId || sessionStorage.getItem(REAL_USER_ID_KEY) || DEFAULT_USER_ID;
+    setOpsMode(false);
+    setRealUserId(null);
+    sessionStorage.removeItem(OPS_MODE_KEY);
+    sessionStorage.removeItem(REAL_USER_ID_KEY);
+    if (userId !== nextUserId) {
+      setContext({
+        userId: nextUserId,
+      });
       window.location.reload();
     }
   };
-  // ==================== 超管用户切换结束 ====================
+
+  const handleUserChange = (newUserId: string | undefined) => {
+    const nextUserId = newUserId || realUserId || sessionStorage.getItem(REAL_USER_ID_KEY) || DEFAULT_USER_ID;
+    if (newUserId && !userList.includes(newUserId)) return;
+
+    setContext({
+      userId: nextUserId,
+    });
+
+    window.location.reload();
+  };
 
   return (
     <>
@@ -93,30 +123,39 @@ export default function Header() {
             className={styles.logoImg}
           />
           {/* ==================== 品牌主题结束 ==================== */}
-          {/* ==================== 超管用户切换 (Kun He) ==================== */}
-          {/* 当 isSuperManager 为 true 时，显示用户选择下拉框 */}
-          {isSuperManager && (
-            <Select
-              value={userId}
-              onChange={handleUserChange}
-              loading={loading}
-              style={{ minWidth: 150, marginLeft: 16 }}
-              placeholder="选择用户"
-              options={userList.map((user) => ({
-                label: `${user.clawName || user.userId}`,
-                value: user.userId,
-              }))}
-            />
-          )}
-          {/* ==================== 超管用户切换结束 ==================== */}
         </div>
         <Space size="middle">
           {/* ==================== 语言/主题切换暂时隐藏 (Kun He) ==================== */}
           {/* <LanguageSwitcher /> */}
           {/* <ThemeToggleButton /> */}
           {/* ==================== 语言/主题切换暂时隐藏结束 ==================== */}
+          {canUseOpsMode && (
+            <Switch
+              checked={opsMode}
+              checkedChildren="运维模式"
+              unCheckedChildren="运维模式"
+              onChange={handleOpsModeChange}
+            />
+          )}
+          {canUseOpsMode && opsMode && (
+            <Select
+              allowClear
+              value={userId ?? undefined}
+              onChange={handleUserChange}
+              loading={loading}
+              showSearch
+              optionFilterProp="label"
+              style={{ minWidth: 180 }}
+              placeholder="切换用户"
+              options={userList.map((userId) => ({
+                label: userId,
+                value: userId,
+              }))}
+            />
+          )}
         </Space>
       </AntHeader>
     </>
   );
 }
+

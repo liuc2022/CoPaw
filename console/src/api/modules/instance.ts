@@ -1,4 +1,5 @@
 import { request } from "../request";
+import { mcpApi } from "./mcp";
 
 // Types
 export interface Source {
@@ -77,6 +78,10 @@ export interface AllocateUserResponse {
   instance_name?: string;
   instance_url?: string;
   message?: string;
+}
+
+export interface SwitchableUser {
+  userId: string;
 }
 
 // API functions
@@ -167,6 +172,14 @@ export const instanceApi = {
     }
     const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
     return request(`/instance/allocations${query}`);
+  },
+
+  getUsersBySource: async (): Promise<SwitchableUser[]> => {
+    const response = await mcpApi.listMCPDistributionTenants();
+
+    return (response.tenant_ids || []).map((tenantId) => ({
+      userId: tenantId,
+    }));
   },
 
   getUserInstanceUrl: async (
